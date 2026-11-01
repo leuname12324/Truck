@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Copa Truck Interlagos",
+      "hasCanvas": true,
+      "bodyTextLen": 318,
+      "bodyTextHash": "247065aeeaf3a66155f9a81dbf275ef8a7f5d8a74975019716a053d4e396b04e",
+      "bodyTextPrefix": "AUTÓDROMO JOSÉ CARLOS PACE Copa Truck Interlagos Três voltas no ",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Copa Truck Interlagos",
+      "hasCanvas": true,
+      "bodyTextLen": 203,
+      "bodyTextHash": "26f8c63c9b14af5883f1af143adc4085b425251142a98c47c5fd36680c453e01",
+      "bodyTextPrefix": "AUTÓDROMO JOSÉ CARLOS PACE Copa Truck Interlagos Três voltas no ",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-preview.json"
+}
