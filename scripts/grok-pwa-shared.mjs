@@ -208,8 +208,10 @@ export function readGrokProjectId() {
 }
 
 export function readGrokExtensionsEnabled() {
+  // This build ships without the platform "Created with Grok" pill. Opt back
+  // in explicitly with VITE_GROK_EXTENSIONS=1.
   const fromProcess = typeof process !== "undefined" ? process.env?.VITE_GROK_EXTENSIONS : "";
-  return String(fromProcess ?? "").trim() !== "0";
+  return String(fromProcess ?? "").trim() === "1";
 }
 
 export function readXCreator() {
