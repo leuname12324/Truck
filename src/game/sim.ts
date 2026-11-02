@@ -58,7 +58,7 @@ function clamp(v: number, a: number, b: number) {
   return Math.max(a, Math.min(b, v));
 }
 
-export function spawnTruck(index: number, isPlayer: boolean): TruckSim {
+export function spawnTruck(index: number, isPlayer: boolean, pace = 0.5, liveryIndex = index): TruckSim {
   const row = Math.floor(index / 2);
   const pole = index % 2 === 0;
   // Left of travel is the inside of the Senna S — pole sits there, just behind the line.
@@ -67,7 +67,7 @@ export function spawnTruck(index: number, isPlayer: boolean): TruckSim {
   const s0 = sampleLerp(-back / TRACK_LENGTH);
   const x = s0.x + s0.nx * col;
   const z = s0.z + s0.nz * col;
-  const liv = LIVERIES[index] ?? LIVERIES[LIVERIES.length - 1];
+  const liv = LIVERIES[liveryIndex] ?? LIVERIES[LIVERIES.length - 1];
   return {
     x,
     y: s0.y,
@@ -89,7 +89,7 @@ export function spawnTruck(index: number, isPlayer: boolean): TruckSim {
     livery: liv,
     isPlayer,
     name: isPlayer ? "Você" : liv.name,
-    skill: isPlayer ? 1 : 0.78 + index * 0.04,
+    skill: isPlayer ? 1 : 0.79 + pace * 0.1,
     boost: 0,
     charge: 0,
     drifting: false,
@@ -98,7 +98,14 @@ export function spawnTruck(index: number, isPlayer: boolean): TruckSim {
 }
 
 export function createField(): TruckSim[] {
-  return LIVERIES.map((liv, i) => spawnTruck(i, i === 0));
+  const n = LIVERIES.length;
+  // The player lines up at the back of the grid so the chase camera never
+  // starts inside a truck that is sitting behind the old pole slot.
+  const field: TruckSim[] = [];
+  for (let i = 0; i < n; i++) {
+    field.push(i === 0 ? spawnTruck(n - 1, true, 0.5, 0) : spawnTruck(i - 1, false, (i - 1) / (n - 2), i));
+  }
+  return field;
 }
 
 function applyDrive(
@@ -112,8 +119,10 @@ function applyDrive(
 ) {
   const near = nearestOnTrack(tr.x, tr.z, tr.t);
   const absLat = Math.abs(near.lateral);
-  const onSlow = absLat > TRACK_HALF_WIDTH - 1.35;
-  const offTrack = onSlow;
+  // `HW` is the asphalt edge; the kerb runs a little further out, so the speed
+  // penalty only starts once half the truck is past the kerb.
+  const onSlow = absLat > TRACK_HALF_WIDTH + 1.2;
+  const offTrack = absLat > TRACK_HALF_WIDTH + 0.9;
   tr.wings = wings && tr.speed > 2;
 
   const speedFactor = clamp(Math.abs(tr.speed) / 9, 0, 1) * (1 - 0.22 * clamp(Math.abs(tr.speed) / TOP_SPEED, 0, 1));
@@ -172,22 +181,29 @@ function applyDrive(
   tr.y = n2.sample.y;
   const side = Math.sign(n2.lateral) || 1;
   const room = lateralRoom(n2.index, side);
-  const wall = Math.min(TRACK_HALF_WIDTH + 8.2, room - 0.55);
+  const wall = Math.min(TRACK_HALF_WIDTH + 8.2, Math.max(TRACK_HALF_WIDTH + 1.2, room - 0.8));
   if (Math.abs(n2.lateral) > wall) {
     const push = (Math.abs(n2.lateral) - wall) * Math.sign(n2.lateral);
     tr.x -= n2.sample.nx * push;
     tr.z -= n2.sample.nz * push;
-    tr.speed *= 0.72;
-    tr.slide *= 0.4;
+    // Only the part of the velocity that drives into the barrier costs speed:
+    // scraping along the wall should not glue the truck to a standstill.
+    const outward = (tr.vx * n2.sample.nx + tr.vz * n2.sample.nz) * Math.sign(n2.lateral);
+    if (outward > 0.5) {
+      tr.speed *= 0.9;
+      tr.slide *= 0.4;
+    } else {
+      tr.speed *= 0.997;
+      tr.slide *= 0.92;
+    }
   }
 
   const dProg = progressDelta(tr.t, n2.t);
   tr.t = n2.t;
 
-  if (!tr.finished && dProg > -0.2) {
-    const cp = CHECKPOINTS[tr.nextCp];
-    const prev = CHECKPOINTS[(tr.nextCp - 1 + CHECKPOINTS.length) % CHECKPOINTS.length];
-    if (crossed(prev, cp, tr.t, dProg)) {
+  if (!tr.finished && dProg > 0) {
+    const cpT = CHECKPOINTS[tr.nextCp];
+    if (crossed(cpT, tr.t, dProg)) {
       if (tr.nextCp === 0) {
         tr.lastLap = tr.lapTime;
         if (tr.bestLap === 0 || tr.lapTime < tr.bestLap) tr.bestLap = tr.lapTime;
@@ -206,18 +222,28 @@ function applyDrive(
   return { offTrack, near: n2, dProg };
 }
 
-function crossed(fromT: number, toT: number, now: number, dProg: number): boolean {
-  if (dProg <= 0.0005) return false;
-  if (toT > fromT) return now >= toT && now - dProg < toT;
-  // wrap around 0
-  return now >= toT && now < 0.2;
+/**
+ * Did the step that ended at `now` pass the checkpoint at `toT`?
+ *
+ * The old test ignored any step with `dProg <= 0.0005` — that is 1.1 m per
+ * fixed frame, so above ~65 km/h no checkpoint was ever counted and a race
+ * could not finish. This works in unwrapped coordinates instead.
+ */
+function crossed(toT: number, now: number, dProg: number): boolean {
+  if (dProg <= 0) return false;
+  const start = now - dProg;
+  let cp = toT;
+  while (cp < start) cp += 1;
+  return cp <= start + dProg;
 }
 
 function aiDrive(tr: TruckSim, dt: number): { throttle: number; brake: number; steer: number; drift: boolean; wings: boolean } {
-  const look = 0.045 + tr.speed / 900;
-  const target = sampleLerp(tr.t + look * tr.skill);
-  const fx = -Math.sin(tr.yaw);
-  const fz = -Math.cos(tr.yaw);
+  const sp = Math.abs(tr.speed);
+  // Pure pursuit: a look-ahead measured in metres, not in "percent of the
+  // lap". The old 0.045–0.09 lap target pointed 100–190 m ahead, so the AI cut
+  // every hairpin and parked itself on the barrier.
+  const look = (16 + sp * 0.55) / TRACK_LENGTH;
+  const target = sampleLerp(tr.t + look);
   const toX = target.x - tr.x;
   const toZ = target.z - tr.z;
   const wantYaw = Math.atan2(-toX, -toZ);
@@ -225,30 +251,34 @@ function aiDrive(tr: TruckSim, dt: number): { throttle: number; brake: number; s
   while (err > Math.PI) err -= Math.PI * 2;
   while (err < -Math.PI) err += Math.PI * 2;
   // Player-visible: +steer = left = +yaw
-  let steer = clamp(err * 1.6, -1, 1);
+  const steer = clamp(err * 2.1, -1, 1);
 
-  const ahead = sampleLerp(tr.t + 0.03);
-  const ahead2 = sampleLerp(tr.t + 0.07);
-  const curv = Math.abs(
-    Math.atan2(ahead2.tx, ahead2.tz) - Math.atan2(ahead.tx, ahead.tz),
-  );
-  let throttle = 0.92 + tr.skill * 0.08;
-  let brake = 0;
-  let wings = curv < 0.04 && tr.speed > 28;
-  if (curv > 0.1 && tr.speed > 26) {
-    throttle = 0.05;
-    brake = clamp((tr.speed - 22) / 22, 0.4, 1);
-    wings = false;
-  } else if (curv > 0.05 && tr.speed > 38) {
-    throttle = 0.3;
-    brake = 0.4;
-    wings = false;
+  // Sharpest heading change over the next ~120 m sets the corner speed. The
+  // AI uses the same yaw-rate limit as the player, minus a safety margin, so
+  // it neither crawls nor drives through the barrier.
+  let curv = 0;
+  for (let k = 1; k <= 4; k++) {
+    const a = sampleLerp(tr.t + (k * 24) / TRACK_LENGTH);
+    const b = sampleLerp(tr.t + ((k + 1) * 24) / TRACK_LENGTH);
+    let turn = Math.atan2(a.tx, a.tz) - Math.atan2(b.tx, b.tz);
+    while (turn > Math.PI) turn -= Math.PI * 2;
+    while (turn < -Math.PI) turn += Math.PI * 2;
+    curv = Math.max(curv, Math.abs(turn));
   }
-  const drift = curv > 0.1 && tr.speed > 18 && Math.abs(steer) > 0.4;
+  const radius = (24 / Math.max(0.03, curv));
+  const yawLimit = (TURN * radius) / (1 + 0.00513 * radius);
+  const vMax = Math.min(TOP_SPEED * 0.98, yawLimit) * (0.88 + tr.skill * 0.08);
+  let throttle = 1;
+  let brake = 0;
+  if (sp > vMax + 3) {
+    brake = clamp((sp - vMax) / 10, 0.3, 1);
+    throttle = 0;
+  } else if (sp > vMax) {
+    throttle = 0.25;
+  }
+
   void dt;
-  void fx;
-  void fz;
-  return { throttle, brake, steer, drift, wings };
+  return { throttle, brake, steer, drift: false, wings: curv < 0.05 && sp > 30 };
 }
 
 export type StepInfo = {
@@ -291,8 +321,9 @@ export function stepField(field: TruckSim[], playerActions: Actions, dt: number,
     for (let i = 1; i < field.length; i++) {
       const tr = field[i];
       if (tr.finished) {
-        tr.speed *= Math.exp(-2 * dt);
-        applyDrive(tr, 0, 0.15, 0, false, false, dt);
+        // Coast to a stop without the reverse creep the brake model produces
+        // at zero speed.
+        applyDrive(tr, 0, 0, 0, false, false, dt);
         continue;
       }
       const a = aiDrive(tr, dt);
@@ -302,26 +333,41 @@ export function stepField(field: TruckSim[], playerActions: Actions, dt: number,
     }
   }
 
-  // Simple truck-truck push
+  // Oriented truck-vs-truck separation: two 2.4 × 5.3 m boxes, not two 3.4 m
+  // circles (which overlapped nose-to-tail and shoved side-by-side pairs).
+  const HALF_LEN = 4.3;
+  const HALF_WID = 2.2;
   for (let i = 0; i < field.length; i++) {
     for (let j = i + 1; j < field.length; j++) {
       const a = field[i];
       const b = field[j];
       const dx = b.x - a.x;
       const dz = b.z - a.z;
-      const d = Math.hypot(dx, dz);
-      const min = 3.4;
-      if (d < min && d > 0.01) {
-        const nrm = (min - d) * 0.5;
-        const nx = dx / d;
-        const nz = dz / d;
-        a.x -= nx * nrm;
-        a.z -= nz * nrm;
-        b.x += nx * nrm;
-        b.z += nz * nrm;
-        a.speed *= 0.96;
-        b.speed *= 0.96;
+      const fx = -Math.sin(a.yaw);
+      const fz = -Math.cos(a.yaw);
+      const rx = Math.cos(a.yaw);
+      const rz = -Math.sin(a.yaw);
+      const along = dx * fx + dz * fz;
+      const across = dx * rx + dz * rz;
+      const penL = HALF_LEN - Math.abs(along);
+      const penW = HALF_WID - Math.abs(across);
+      if (penL <= 0 || penW <= 0) continue;
+      const half = Math.min(penL, penW) * 0.5;
+      if (penW < penL) {
+        const s = across >= 0 ? 1 : -1;
+        a.x -= rx * s * half;
+        a.z -= rz * s * half;
+        b.x += rx * s * half;
+        b.z += rz * s * half;
+      } else {
+        const s = along >= 0 ? 1 : -1;
+        a.x -= fx * s * half;
+        a.z -= fz * s * half;
+        b.x += fx * s * half;
+        b.z += fz * s * half;
       }
+      a.speed *= 0.985;
+      b.speed *= 0.985;
     }
   }
 

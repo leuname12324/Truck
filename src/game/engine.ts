@@ -47,7 +47,7 @@ export function createGame(canvas: HTMLCanvasElement): GameHandle {
   renderer.toneMappingExposure = 1.05;
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(62, 1, 0.2, 1200);
+  const camera = new THREE.PerspectiveCamera(58, 1, 0.2, 1200);
   const disposeWorld = buildWorld(scene);
 
   let field = createField();
@@ -75,11 +75,21 @@ export function createGame(canvas: HTMLCanvasElement): GameHandle {
 
   const sun = scene.children.find((c) => c instanceof THREE.DirectionalLight) as THREE.DirectionalLight | undefined;
 
+  // Narrow screens need a wider lens or the truck fills the whole frame.
+  function baseFov() {
+    const a = camera.aspect || 1;
+    if (a < 0.8) return 78;
+    if (a < 1.15) return 70;
+    if (a < 1.6) return 62;
+    return 58;
+  }
+
   function layout() {
     const w = canvas.clientWidth || window.innerWidth;
     const h = canvas.clientHeight || window.innerHeight;
     renderer.setSize(w, h, false);
     camera.aspect = w / Math.max(1, h);
+    camera.fov = baseFov();
     camera.updateProjectionMatrix();
   }
   layout();
@@ -109,7 +119,8 @@ export function createGame(canvas: HTMLCanvasElement): GameHandle {
     const fx = -Math.sin(tr.yaw);
     const fz = -Math.cos(tr.yaw);
     const speedK = Math.abs(tr.speed);
-    camera.fov += (62 + Math.min(8, speedK * 0.08) - camera.fov) * (1 - Math.exp(-4 * dt));
+    const target = baseFov() + Math.min(8, speedK * 0.09);
+    camera.fov += (target - camera.fov) * (1 - Math.exp(-4 * dt));
     camera.updateProjectionMatrix();
 
     if (cinematic) {
@@ -117,10 +128,12 @@ export function createGame(canvas: HTMLCanvasElement): GameHandle {
       desired.set(tr.x + Math.cos(t) * 14, tr.y + 8.5, tr.z + Math.sin(t) * 14);
       lookAt.set(tr.x, tr.y + 1.4, tr.z);
     } else {
-      const dist = 12.2 + Math.min(2.2, speedK * 0.02);
-      const height = 4.8;
+      // A taller, further chase camera keeps the whole truck (and the road
+      // ahead) in frame at 250 km/h on a phone.
+      const dist = 15.5 + Math.min(2.4, speedK * 0.025);
+      const height = 6.6;
       desired.set(tr.x - fx * dist, tr.y + height, tr.z - fz * dist);
-      lookAt.set(tr.x + fx * 8, tr.y + 1.7, tr.z + fz * 8);
+      lookAt.set(tr.x + fx * 10, tr.y + 2.2, tr.z + fz * 10);
     }
 
     desired.y = liftCamera(desired.x, desired.z, desired.y, tr.t);
@@ -183,11 +196,15 @@ export function createGame(canvas: HTMLCanvasElement): GameHandle {
     }
     phase = "countdown";
     countdown = 3;
-    const pole = field[0];
-    const fx = -Math.sin(pole.yaw);
-    const fz = -Math.cos(pole.yaw);
-    camPos.set(pole.x - fx * 18, pole.y + 7.2, pole.z - fz * 18);
-    camLook.set(pole.x + fx * 14, pole.y + 1.5, pole.z + fz * 14);
+    cdBeep = 3;
+    trauma = 0;
+    acc = 0;
+    last = performance.now();
+    const me = field[0];
+    const fx = -Math.sin(me.yaw);
+    const fz = -Math.cos(me.yaw);
+    camPos.set(me.x - fx * 21, me.y + 7.8, me.z - fz * 21);
+    camLook.set(me.x + fx * 12, me.y + 2, me.z + fz * 12);
     beep(440, 0.12, 0.16);
     publishHud({ phase, countdown: 3, corner: "Reta Principal", wrongWay: false, results: [] });
   }

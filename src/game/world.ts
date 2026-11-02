@@ -55,18 +55,16 @@ function clampOffset(i: number, signed: number) {
 
 function roadGeometry(): THREE.BufferGeometry {
   const segs = SAMPLES.length;
+  // The racing surface is always full width, exactly like the physics model.
   const hw = TRACK_HALF_WIDTH;
-  const kerb = 0.85;
   const positions: number[] = [];
   const uvs: number[] = [];
   const indices: number[] = [];
   for (let i = 0; i < segs; i++) {
     const s = SAMPLES[i];
-    const l = clampOffset(i, hw);
-    const r = clampOffset(i, -hw);
     const along = s.s / 4;
-    positions.push(s.x + s.nx * l, s.y + 0.06, s.z + s.nz * l);
-    positions.push(s.x + s.nx * r, s.y + 0.06, s.z + s.nz * r);
+    positions.push(s.x + s.nx * hw, s.y + 0.06, s.z + s.nz * hw);
+    positions.push(s.x - s.nx * hw, s.y + 0.06, s.z - s.nz * hw);
     uvs.push(0, along, 1, along);
   }
   for (let i = 0; i < segs; i++) {
@@ -81,7 +79,6 @@ function roadGeometry(): THREE.BufferGeometry {
   geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
   geo.setIndex(indices);
   geo.computeVertexNormals();
-  void kerb;
   return geo;
 }
 
@@ -118,8 +115,9 @@ function embankmentGeometry(side: number): THREE.BufferGeometry {
   const indices: number[] = [];
   for (let i = 0; i < segs; i++) {
     const s = SAMPLES[i];
-    const inner = clampOffset(i, (TRACK_HALF_WIDTH + 2.4) * side);
-    const outer = clampOffset(i, (TRACK_HALF_WIDTH + 16) * side);
+    const room = lateralRoom(i, side);
+    const inner = (TRACK_HALF_WIDTH + 2.2) * side;
+    const outer = side * Math.max(TRACK_HALF_WIDTH + 1.5, Math.min(TRACK_HALF_WIDTH + 16, room));
     const span = Math.abs(outer - inner);
     const outerY = span < 1.2 ? s.y + 0.02 : 0.02;
     positions.push(s.x + s.nx * inner, s.y + 0.02, s.z + s.nz * inner);
@@ -147,9 +145,10 @@ function wallGeometry(side: number): THREE.BufferGeometry {
   const indices: number[] = [];
   for (let i = 0; i < segs; i++) {
     const s = SAMPLES[i];
-    const want = (TRACK_HALF_WIDTH + 8.4) * side;
-    let d = clampOffset(i, want);
-    if (Math.abs(d) < TRACK_HALF_WIDTH + 1.8) d = clampOffset(i, Math.sign(side || 1) * (TRACK_HALF_WIDTH + 1.8));
+    const room = lateralRoom(i, side);
+    // Never let the barrier collapse onto the racing line; where another part
+    // of the circuit is close, park it halfway between the two centrelines.
+    const d = side * Math.min(TRACK_HALF_WIDTH + 8.4, Math.max(TRACK_HALF_WIDTH + 1.3, room - 0.45));
     const x = s.x + s.nx * d;
     const z = s.z + s.nz * d;
     positions.push(x, s.y, z, x, s.y + h, z);
@@ -211,28 +210,28 @@ export function buildWorld(scene: THREE.Scene): () => void {
   scene.add(bankL, bankR);
 
   // Lago no miolo, ao lado da Descida do Lago
-  const lakeS = SAMPLES[Math.floor(0.38 * SAMPLES.length)];
-  let lakeSide = 1;
-  if (lateralRoom(Math.floor(0.38 * SAMPLES.length), -1) > lateralRoom(Math.floor(0.38 * SAMPLES.length), 1)) lakeSide = -1;
-  const lakeRoom = lateralRoom(Math.floor(0.38 * SAMPLES.length), lakeSide);
-  const lakeDist = Math.min(46, Math.max(TRACK_HALF_WIDTH + 18, lakeRoom - 8));
-  if (lakeRoom > TRACK_HALF_WIDTH + 28) {
-  const lakeM = new THREE.MeshStandardMaterial({
-    color: "#1a4a5c",
-    roughness: 0.18,
-    metalness: 0.35,
-  });
-  const lake = new THREE.Mesh(new THREE.CircleGeometry(36, 28), lakeM);
-  lake.rotation.x = -Math.PI / 2;
-  lake.position.set(lakeS.x + lakeS.nx * lakeSide * lakeDist, 0.2, lakeS.z + lakeS.nz * lakeSide * lakeDist);
-  scene.add(lake);
-  const lakeEdge = new THREE.Mesh(
-    new THREE.RingGeometry(36, 44, 28),
-    new THREE.MeshStandardMaterial({ color: "#6b5a3e", roughness: 1 }),
-  );
-  lakeEdge.rotation.x = -Math.PI / 2;
-  lakeEdge.position.set(lake.position.x, 0.18, lake.position.z);
-  scene.add(lakeEdge);
+  const lakeIdx = Math.floor(0.38 * SAMPLES.length);
+  const lakeS = SAMPLES[lakeIdx];
+  const lakeSide = lateralRoom(lakeIdx, -1) > lateralRoom(lakeIdx, 1) ? -1 : 1;
+  const lakeRoom = lateralRoom(lakeIdx, lakeSide);
+  if (lakeRoom > TRACK_HALF_WIDTH + 44) {
+    const lakeDist = Math.min(56, lakeRoom - 4);
+    const lakeM = new THREE.MeshStandardMaterial({
+      color: "#1a4a5c",
+      roughness: 0.18,
+      metalness: 0.35,
+    });
+    const lake = new THREE.Mesh(new THREE.CircleGeometry(36, 28), lakeM);
+    lake.rotation.x = -Math.PI / 2;
+    lake.position.set(lakeS.x + lakeS.nx * lakeSide * lakeDist, 0.2, lakeS.z + lakeS.nz * lakeSide * lakeDist);
+    scene.add(lake);
+    const lakeEdge = new THREE.Mesh(
+      new THREE.RingGeometry(36, 44, 28),
+      new THREE.MeshStandardMaterial({ color: "#6b5a3e", roughness: 1 }),
+    );
+    lakeEdge.rotation.x = -Math.PI / 2;
+    lakeEdge.position.set(lake.position.x, 0.18, lake.position.z);
+    scene.add(lakeEdge);
   }
 
   // Start/finish markings

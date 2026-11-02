@@ -47,6 +47,41 @@ function elevAt(t: number): number {
 }
 
 const N = 480;
+
+/**
+ * Resample a closed polyline at `steps` points evenly spaced by arc length.
+ * The Catmull-Rom pass is uniform in *parameter*, but the raw points are not
+ * evenly spaced in metres — some samples ended up ~15 m apart and others ~1 m,
+ * which both faceted the mesh and made a fraction of the lap mean a different
+ * distance in different corners.
+ */
+function resampleInto(pts: { x: number; z: number }[], steps: number) {
+  const cum: number[] = [0];
+  for (let i = 0; i < steps; i++) {
+    const a = pts[i];
+    const b = pts[(i + 1) % steps];
+    cum.push(cum[i] + Math.hypot(b.x - a.x, b.z - a.z));
+  }
+  const total = cum[steps] || 1;
+  const stepLen = total / steps;
+  const out: { x: number; z: number }[] = [];
+  let seg = 0;
+  for (let k = 0; k < steps; k++) {
+    const target = k * stepLen;
+    while (seg < steps - 1 && cum[seg + 1] < target) seg++;
+    const a = pts[seg];
+    const b = pts[(seg + 1) % steps];
+    const span = cum[seg + 1] - cum[seg];
+    const f = span > 1e-9 ? (target - cum[seg]) / span : 0;
+    out.push({ x: a.x + (b.x - a.x) * f, z: a.z + (b.z - a.z) * f });
+  }
+  for (let i = 0; i < steps; i++) {
+    pts[i].x = out[i].x;
+    pts[i].z = out[i].z;
+  }
+  return stepLen;
+}
+
 export const SAMPLES: Sample[] = [];
 
 function buildSamples() {
@@ -90,14 +125,22 @@ function buildSamples() {
     pts.push(lerp(B1, B2, t1, t2, t));
   }
 
-  // Keep two passes of the circuit from melting into one ribbon.
+  // One sample per equal distance from here on.
+  resampleInto(pts, steps);
+
+  // Keep the two parts of the lap that really run side by side from melting
+  // into one ribbon. Only sections that are far apart *along the lap* count:
+  // a hairpin's two straights are close in space on purpose, and pushing those
+  // apart was flattening the corners.
   const minGap = TRACK_HALF_WIDTH * 2 + 6;
+  const SEPARATE_M = 400;
+  const stepLen = TRACK_LENGTH / steps;
   const separate = (passes: number) => {
     for (let pass = 0; pass < passes; pass++) {
       for (let i = 0; i < steps; i++) {
-        for (let j = i + 18; j < steps; j++) {
-          const gap = Math.min(j - i, steps - (j - i));
-          if (gap < 18) continue;
+        for (let j = i + 1; j < steps; j++) {
+          const gapM = Math.min(j - i, steps - (j - i)) * stepLen;
+          if (gapM < SEPARATE_M) continue;
           const dx = pts[j].x - pts[i].x;
           const dz = pts[j].z - pts[i].z;
           const d = Math.hypot(dx, dz);
@@ -123,19 +166,9 @@ function buildSamples() {
     pts[i].z = a.z * 0.18 + b.z * 0.64 + c.z * 0.18;
   }
   separate(4);
+  // Separing smooths the spacing; restore one sample per equal distance.
+  resampleInto(pts, steps);
 
-  let sAcc = 0;
-  const dists: number[] = [];
-  for (let i = 0; i < steps; i++) {
-    const a = pts[i];
-    const b = pts[(i + 1) % steps];
-    const d = Math.hypot(b.x - a.x, b.z - a.z);
-    dists.push(d);
-    sAcc += d;
-  }
-  const scaleS = TRACK_LENGTH / sAcc;
-
-  let s = 0;
   for (let i = 0; i < steps; i++) {
     const a = pts[i];
     const b = pts[(i + 1) % steps];
@@ -144,11 +177,11 @@ function buildSamples() {
     const len = Math.hypot(tx, tz) || 1;
     tx /= len;
     tz /= len;
-    const t = s / TRACK_LENGTH;
+    // `t` is now both the sample index fraction and the distance fraction.
+    const t = i / steps;
     const y = elevAt(t);
-    const y2 = elevAt((s + dists[i] * scaleS) / TRACK_LENGTH);
-    const horiz = dists[i] * scaleS;
-    const ty = (y2 - y) / (horiz || 1);
+    const y2 = elevAt((i + 1) / steps);
+    const ty = (y2 - y) / (stepLen || 1);
     const nlen = Math.hypot(1, ty);
     SAMPLES.push({
       x: a.x,
@@ -160,49 +193,58 @@ function buildSamples() {
       nx: -tz,
       nz: tx,
       t,
-      s,
+      s: i * stepLen,
     });
-    s += horiz;
   }
 }
 
 buildSamples();
 
-const latPos = new Float32Array(N);
-const latNeg = new Float32Array(N);
+// Free lateral space on each side of the centreline, in metres.
+//
+// The old version intersected a small circle with every other sample, including
+// the samples a few dozen metres ahead on the *same* corner, so the room
+// collapsed to zero on tight turns and `clampOffset()` squashed the road (and
+// the kerbs, runoff and wall) into the corner. Here we only look at parts of
+// the lap that are far away along the track and use half the real distance to
+// the nearest of those: symmetric walls never cross each other.
+const CLEARANCE_M = 400; // metres along the lap — same stretch of track
+const CLEARANCE_MAX = 60; // metres
+
+const roomPos = new Float32Array(N);
+const roomNeg = new Float32Array(N);
 {
-  const R = TRACK_HALF_WIDTH + 0.9;
-  const R2 = R * R;
   for (let i = 0; i < N; i++) {
-    let pos = 42;
-    let neg = 42;
     const s = SAMPLES[i];
-    for (let j = 0; j < N; j += 2) {
-      const gap = Math.min(Math.abs(j - i), N - Math.abs(j - i));
-      if (gap < 8) continue;
-      const o = SAMPLES[j];
-      const dx = s.x - o.x;
-      const dz = s.z - o.z;
-      const b = 2 * (dx * s.nx + dz * s.nz);
-      const c = dx * dx + dz * dz - R2;
-      const disc = b * b - 4 * c;
-      if (disc <= 0) continue;
-      const root = Math.sqrt(disc);
-      const r1 = (-b - root) / 2;
-      const r2 = (-b + root) / 2;
-      if (c >= 0 && r1 > 0) pos = Math.min(pos, r1);
-      else if (c < 0) pos = 0;
-      if (c >= 0 && r2 < 0) neg = Math.min(neg, -r2);
-      else if (c < 0) neg = 0;
+    let pos = CLEARANCE_MAX;
+    let neg = CLEARANCE_MAX;
+    for (let j = 0; j < N; j++) {
+      let ds = Math.abs(SAMPLES[j].s - s.s);
+      if (TRACK_LENGTH - ds < ds) ds = TRACK_LENGTH - ds;
+      if (ds < CLEARANCE_M) continue;
+      const a = SAMPLES[j];
+      const b = SAMPLES[(j + 1) % N];
+      const ex = b.x - a.x;
+      const ez = b.z - a.z;
+      const el = ex * ex + ez * ez || 1;
+      let k = ((s.x - a.x) * ex + (s.z - a.z) * ez) / el;
+      k = k < 0 ? 0 : k > 1 ? 1 : k;
+      const dx = a.x + ex * k - s.x;
+      const dz = a.z + ez * k - s.z;
+      const d = Math.hypot(dx, dz);
+      if (d < 1e-3) continue;
+      const room = d * 0.5;
+      if (dx * s.nx + dz * s.nz >= 0) pos = Math.min(pos, room);
+      else neg = Math.min(neg, room);
     }
-    latPos[i] = pos;
-    latNeg[i] = neg;
+    roomPos[i] = Math.min(CLEARANCE_MAX, pos);
+    roomNeg[i] = Math.min(CLEARANCE_MAX, neg);
   }
 }
 
 export function lateralRoom(index: number, side: number) {
   const i = ((index % N) + N) % N;
-  return side >= 0 ? latPos[i] : latNeg[i];
+  return side >= 0 ? roomPos[i] : roomNeg[i];
 }
 
 export function wrap01(t: number): number {
@@ -294,16 +336,38 @@ export function nearestOnTrack(x: number, z: number, hint?: number): Nearest {
   }
 
   const p = SAMPLES[best];
+  const prev = SAMPLES[(best - 1 + N) % N];
+  const next = SAMPLES[(best + 1) % N];
   const dx = x - p.x;
   const dz = z - p.z;
-  const lateral = dx * p.nx + dz * p.nz;
+  // Project the point onto the closest segment of the centreline. Using the
+  // raw sample was quantising the truck height (`sample.y`) into 4.5 m steps,
+  // which read as a jittery / bumpy ride.
+  const forward = dx * p.tx + dz * p.tz;
+  const a = forward >= 0 ? p : prev;
+  const b = forward >= 0 ? next : p;
+  const ex = b.x - a.x;
+  const ez = b.z - a.z;
+  const el = ex * ex + ez * ez || 1;
+  let k = ((x - a.x) * ex + (z - a.z) * ez) / el;
+  k = k < 0 ? 0 : k > 1 ? 1 : k;
+  const px = a.x + ex * k;
+  const pz = a.z + ez * k;
+  const py = a.y + (b.y - a.y) * k;
+  let nx = a.nx + (b.nx - a.nx) * k;
+  let nz = a.nz + (b.nz - a.nz) * k;
+  const nl = Math.hypot(nx, nz) || 1;
+  nx /= nl;
+  nz /= nl;
+  const lateral = (x - px) * nx + (z - pz) * nz;
   const absLat = Math.abs(lateral);
+  const t = wrap01(a.t + progressDelta(a.t, b.t) * k);
   return {
-    t: p.t,
-    s: p.s,
+    t,
+    s: a.s + (b.s - a.s) * k,
     lateral,
     onTrack: absLat < TRACK_HALF_WIDTH,
-    sample: p,
+    sample: { ...p, x: px, y: py, z: pz, nx, nz, t },
     dist: Math.sqrt(bestD),
     index: best,
   };
