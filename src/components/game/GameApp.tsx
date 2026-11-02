@@ -97,8 +97,8 @@ function BrakeTune() {
 
 function StartScreen({ onStart }: { onStart: () => void }) {
   return (
-    <div className="absolute inset-0 z-20 flex flex-col justify-end bg-[linear-gradient(180deg,transparent_0%,rgba(12,13,12,0.18)_40%,rgba(12,13,12,0.92)_100%)]">
-      <div className="flex flex-col gap-5 px-6 pb-[max(2rem,env(safe-area-inset-bottom))] pt-10 md:px-12 md:pb-12">
+    <div className="absolute inset-0 z-20 overflow-y-auto bg-[linear-gradient(180deg,transparent_0%,rgba(12,13,12,0.18)_40%,rgba(12,13,12,0.92)_100%)]">
+      <div className="flex min-h-full flex-col justify-end gap-5 px-6 pb-[max(2rem,env(safe-area-inset-bottom))] pt-20 md:px-12 md:pb-12">
         <p className="text-xs font-medium tracking-[0.28em] text-muted uppercase">Autódromo José Carlos Pace</p>
         <h1 className="font-display text-5xl leading-[0.9] tracking-tight text-fg text-balance md:text-7xl">
           Copa Truck
@@ -224,20 +224,20 @@ function TouchPad({ onPause }: { onPause: () => void }) {
     }
   }
 
-  const btn = "pointer-events-auto h-14 w-14 rounded-full border border-border bg-bg/70 text-fg backdrop-blur-sm active:bg-accent active:text-accent-fg";
+  const btn = "pointer-events-auto h-11 w-11 rounded-full border border-border bg-bg/70 text-fg backdrop-blur-sm active:bg-accent active:text-accent-fg";
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-end justify-between p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:hidden">
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-end justify-between gap-2 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden">
       <div
         ref={steerRef}
-        className="pointer-events-auto h-28 w-36 rounded-[24px] border border-border bg-bg/55 backdrop-blur-sm"
+        className="pointer-events-auto h-24 w-[26vw] min-w-[76px] max-w-[112px] shrink-0 rounded-[22px] border border-border bg-bg/55 backdrop-blur-sm"
         onPointerDown={onSteer}
         onPointerMove={(e) => e.buttons && onSteer(e)}
         onPointerUp={endSteer}
         onPointerCancel={endSteer}
       />
-      <div className="flex items-center gap-2">
-        <button type="button" className={cn(btn, "h-11 w-11")} onClick={onPause} aria-label="Pausa">
+      <div className="flex shrink-0 items-center gap-1.5">
+        <button type="button" className={cn(btn, "h-10 w-10")} onClick={onPause} aria-label="Pausa">
           <Pause className="mx-auto size-4" />
         </button>
         <button
@@ -287,7 +287,7 @@ function TouchPad({ onPause }: { onPause: () => void }) {
         </button>
         <button
           type="button"
-          className={cn(btn, "h-16 w-16 bg-accent text-accent-fg")}
+          className={cn(btn, "h-14 w-14 bg-accent text-accent-fg")}
           onPointerDown={() => {
             touch.throttle = 1;
           }}
@@ -298,7 +298,7 @@ function TouchPad({ onPause }: { onPause: () => void }) {
             touch.throttle = 0;
           }}
         >
-          <span className="text-xs font-medium">Acelera</span>
+          <span className="text-[10px] leading-tight font-medium">Acelera</span>
         </button>
       </div>
     </div>
