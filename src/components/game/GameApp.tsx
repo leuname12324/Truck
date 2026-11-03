@@ -98,10 +98,14 @@ function BrakeTune() {
 function StartScreen({ onStart }: { onStart: () => void }) {
   const totalLaps = useGameStore((s) => s.totalLaps);
   const setTotalLaps = useGameStore((s) => s.setTotalLaps);
+  const steeringSensitivity = useGameStore((s) => s.steeringSensitivity);
+  const setSteeringSensitivity = useGameStore((s) => s.setSteeringSensitivity);
   const [laps, setLaps] = useState(totalLaps);
+  const [sens, setSens] = useState(steeringSensitivity);
   useEffect(() => {
     setTotalLaps(laps);
-  }, [laps, setTotalLaps]);
+    setSteeringSensitivity(sens);
+  }, [laps, sens, setTotalLaps, setSteeringSensitivity]);
   return (
     <div className="absolute inset-0 z-20 overflow-y-auto bg-[linear-gradient(180deg,transparent_0%,rgba(12,13,12,0.18)_40%,rgba(12,13,12,0.92)_100%)]">
       <div className="flex min-h-full flex-col justify-end gap-5 px-6 pb-[max(2rem,env(safe-area-inset-bottom))] pt-20 md:px-12 md:pb-12">
@@ -126,6 +130,17 @@ function StartScreen({ onStart }: { onStart: () => void }) {
             <option value={7}>7</option>
           </select>
           <p className="text-xs text-subtle">{laps === 1 ? 'volta completa' : laps + ' voltas completas'}</p>
+          <label className="text-xs text-subtle uppercase tracking-wider">Sensibilidade da direção</label>
+          <input
+            type="range"
+            min="0.3"
+            max="2.0"
+            step="0.1"
+            value={sens}
+            onChange={(e) => setSens(parseFloat(e.target.value))}
+            className="w-[120px] accent-accent bg-bg/30 rounded-lg cursor-pointer"
+          />
+          <span className="text-xs text-subtle">{sens.toFixed(1)}x</span>
           <Button size="xl" onClick={onStart} className="min-w-44 font-display text-2xl tracking-wide">
             Largar
           </Button>
