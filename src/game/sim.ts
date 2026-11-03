@@ -42,6 +42,7 @@ export type TruckSim = {
   wings: boolean;
   prevWings: boolean;
   susp: number;
+  groupTilt: number;
 };
 
 const KMH = 1 / 3.6;
@@ -49,12 +50,18 @@ const TOP_SPEED = 230 * KMH;   // ~230 km/h com asa fechada
 const WING_BONUS = 35 * KMH;   // ~265 km/h com asa aberta (230 + 35)
 const BOOST_BONUS = 10 * KMH;
 const ABS_CAP = 280 * KMH;
-const ACCEL = 42;
-const BRAKE = 46;
+const ACCEL = 28;              // Aceleração mais progressiva (caminhão pesado)
+const BRAKE = 34;              // Frenagem progressiva, distância maior
 const DRAG = ACCEL / TOP_SPEED;
-const TURN = 1.62;
+const TURN = 1.15;             // Direção menos sensível (caminhão grande)
 const GRIP = 11.0;
 const DRIFT_GRIP = 2.6;
+
+// Constantes de física realista para caminhão pesado
+const MASS_FACTOR = 1.0;       // Fator de massa (afeta inércia)
+const ENGINE_LAG = 0.15;       // Atraso do motor na saída da imobilidade
+const WEIGHT_TRANSFER = 0.35;  // Transferência de peso em frenagem/aceleração
+const CORNER_STABILITY = 0.85; // Estabilidade nas curvas (quanto menor, mais deriva)
 
 function clamp(v: number, a: number, b: number) {
   return Math.max(a, Math.min(b, v));
@@ -98,6 +105,7 @@ export function spawnTruck(index: number, isPlayer: boolean, pace = 0.5, liveryI
     wings: false,
     prevWings: false,
     susp: 0,
+    groupTilt: 0,
   };
 }
 
@@ -135,20 +143,56 @@ function applyDrive(
   }
   tr.prevWings = tr.wings;
 
+  // ---- PESO E INÉRCIA DO CAMINHÃO ----
+  // Caminhões pesados não mudam de direção instantaneamente.
+  // Quanto mais rápido, mais difícil vira (inércia direcional).
+  const speedK = Math.abs(tr.speed);
+  const inertiaTurn = 1 - CORNER_STABILITY * clamp(speedK / TOP_SPEED, 0, 1);
+  const effectiveTurn = TURN * inertiaTurn;
+
+  // ---- ACELERAÇÃO PROGRESSIVA ----
+  // Caminhão pesado não sai disparado. Há atraso do motor na saída da imobilidade.
+  // A aceleração é menor em baixa velocidade e aumenta conforme o motor "pega".
+  const engineLagFactor = 1 - Math.exp(-speedK * ENGINE_LAG * 3);
+  const throttleResponse = throttle * (0.35 + 0.65 * engineLagFactor);
+
+  // ---- SISTEMA DE MARCHAS SIMPLIFICADO ----
+  // Quanto mais rápido, menor a aceleração (motor chega no limite de potência)
+  const gearFactor = 1 - clamp(speedK / TOP_SPEED, 0, 0.85);
+
   const speedFactor = clamp(Math.abs(tr.speed) / 9, 0, 1) * (1 - 0.22 * clamp(Math.abs(tr.speed) / TOP_SPEED, 0, 1));
   const reverse = tr.speed >= 0 ? 1 : -1;
   const brakeTurn = 1 + brake * 0.28;
-  tr.yaw += steer * TURN * speedFactor * brakeTurn * reverse * dt;
-  tr.steerVis += (steer - tr.steerVis) * (1 - Math.exp(-12 * dt));
 
-  if (throttle > 0) tr.speed += throttle * ACCEL * dt;
+  // Direção afetada pela inércia (mais difícil virar em alta velocidade)
+  tr.yaw += steer * effectiveTurn * speedFactor * brakeTurn * reverse * dt;
+
+  // Limite de direção em alta velocidade (não vira instantaneamente)
+  const maxSteerRate = 1.5 * (1 - clamp(speedK / TOP_SPEED, 0, 0.7));
+  const steerChange = steer - tr.steerVis;
+  tr.steerVis += clamp(steerChange, -maxSteerRate * dt, maxSteerRate * dt) * (1 - Math.exp(-10 * dt));
+
+  // ---- ACELERAÇÃO COM PESO ----
+  if (throttleResponse > 0) {
+    // Aceleração progressiva: mais lenta no início, aumenta com o motor
+    const accelForce = ACCEL * throttleResponse * gearFactor * (1 - WEIGHT_TRANSFER * brake);
+    tr.speed += accelForce * dt;
+  }
   if (tr.wings) tr.speed += DRAG * WING_BONUS * dt;
+
+  // ---- FRENAGEM PROGRESSIVA ----
   if (brake > 0) {
-    const force = BRAKE * getBrakePower();
-    if (tr.speed > 0.4) tr.speed -= brake * force * dt;
-    else tr.speed -= brake * ACCEL * 0.45 * dt;
+    // Caminhão pesado precisa de mais distância para parar
+    // A frenagem é menos eficaz em alta velocidade (distância maior)
+    const force = BRAKE * getBrakePower() * (1 - clamp(speedK / TOP_SPEED, 0, 0.4));
+    if (tr.speed > 0.4) {
+      tr.speed -= brake * force * dt;
+    } else {
+      tr.speed -= brake * ACCEL * 0.45 * dt;
+    }
   }
 
+  // Arrastar do ar e resistência ao rolamento
   tr.speed *= 1 - (DRAG + (throttle < 0.1 && brake < 0.1 ? 0.35 : 0)) * dt;
   if (tr.boost > 0) {
     tr.speed += 14 * dt;
@@ -159,8 +203,9 @@ function applyDrive(
   if (tr.speed > max) tr.speed += (max - tr.speed) * Math.min(1, 6 * dt);
   tr.speed = clamp(tr.speed, -12 * (onSlow ? 0.9 : 1), max + 0.4);
 
+  // ---- DRIFT E CARGA ----
   const wasDrifting = tr.drifting;
-  tr.drifting = drift && Math.abs(steer) > 0.2 && Math.abs(tr.speed) > 10;
+  tr.drifting = drift && Math.abs(tr.steerVis) > 0.2 && Math.abs(tr.speed) > 10;
   if (tr.drifting) {
     tr.charge = Math.min(1, tr.charge + dt * 0.75);
   } else if (wasDrifting && tr.charge > 0.28) {
@@ -178,27 +223,34 @@ function applyDrive(
   tr.vx = fx * tr.speed;
   tr.vz = fz * tr.speed;
 
+  // ---- LATERAL SLIDE COM INÉRCIA ----
   const grip = tr.drifting ? DRIFT_GRIP : GRIP;
-  // lateral slide as extra velocity
   const lat = tr.slide;
-  tr.slide += -steer * Math.abs(tr.speed) * (tr.drifting ? 1.6 : 0.35) * dt;
-  tr.slide *= Math.exp(-grip * dt);
+  // Slide lateral maior em alta velocidade (menos aderência efetiva)
+  const lateralGrip = grip * (1 - 0.25 * clamp(speedK / TOP_SPEED, 0, 1));
+  tr.slide += -steer * Math.abs(tr.speed) * (tr.drifting ? 1.6 : 0.35) * dt * inertiaTurn;
+  tr.slide *= Math.exp(-lateralGrip * dt);
 
   tr.x += (tr.vx + rx * lat) * dt;
   tr.z += (tr.vz + rz * lat) * dt;
 
+  // ---- SUSPENSÃO E CONTATO COM O SOLO ----
   const n2 = nearestOnTrack(tr.x, tr.z, tr.t);
   // Suspensão sensível ao relevo: o caminhão sobe e desce com a elevação da
-  // pista, reagindo até a pequenas mudanças de altura. Amortecimento forte
-  // para não deixar o caminhão voar ou pular.
+  // pista, reagindo até a pequenas mudanças de altura.
   const targetY = n2.sample.y + 0.65;
-  const maxStep = 0.8; // não deixa o caminhão saltar mais que isso por frame
+  const maxStep = 0.6; // não deixa o caminhão saltar mais que isso por frame
   let dy = targetY - tr.susp;
   dy = Math.max(-maxStep, Math.min(maxStep, dy));
-  tr.susp += dy * (1 - Math.exp(-10 * dt));
+  tr.susp += dy * (1 - Math.exp(-12 * dt));
   tr.y = tr.susp;
-  // Nunca deixa o caminhão ficar abaixo do asfalto nem muito acima
+  // Nunca deixa o caminhão ficar abaixo do asfalto
   tr.y = Math.max(tr.y, n2.sample.y + 0.5);
+
+  // Transferência de peso: ao frear, dianteira baixa; ao acelerar, traseira baixa
+  const weightShift = (brake - throttleResponse) * WEIGHT_TRANSFER * 0.3;
+  tr.groupTilt = weightShift; // usado na animação visual
+
   const side = Math.sign(n2.lateral) || 1;
   const room = lateralRoom(n2.index, side);
   const wall = Math.min(TRACK_HALF_WIDTH + 8.2, Math.max(TRACK_HALF_WIDTH + 1.2, room - 0.8));

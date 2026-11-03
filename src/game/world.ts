@@ -283,39 +283,56 @@ export function buildWorld(scene: THREE.Scene): () => void {
 
   // Grandstands far off the circuit so they never block the view.
   // Skip the first samples (start/first corner).
-  const standM = new THREE.MeshStandardMaterial({ color: "#8a9094", roughness: 0.7 });
-  const seatM = new THREE.MeshStandardMaterial({ color: "#c23b2e", roughness: 0.6 });
+  // Construção de blocos sólidos de concreto (escadaria tipo arquibancada profissional).
+  const standM = new THREE.MeshStandardMaterial({ color: "#9aa3a8", roughness: 0.85 });
+  const seatM = new THREE.MeshStandardMaterial({ color: "#c23b2e", roughness: 0.7 });
   const stairM = new THREE.MeshStandardMaterial({ color: "#6b7280", roughness: 0.9 });
   let stands = 0;
-  for (let k = 30; k < SAMPLES.length && stands < 12; k += 12) {
+  for (let k = 35; k < SAMPLES.length && stands < 14; k += 14) {
     const sm = SAMPLES[k];
     const side = lateralRoom(k, 1) > lateralRoom(k, -1) ? 1 : -1;
     const room = lateralRoom(k, side);
-    if (room < TRACK_HALF_WIDTH + 22) continue;
+    if (room < TRACK_HALF_WIDTH + 28) continue;
     const stand = new THREE.Group();
-    // Base de concreto
-    const base = new THREE.Mesh(new THREE.BoxGeometry(12, 5.5, 4), standM);
-    base.position.y = 2.75;
+
+    // Bloco principal da arquibancada (base maciça de concreto)
+    const base = new THREE.Mesh(new THREE.BoxGeometry(18, 7, 5), standM);
+    base.position.y = 3.5;
     base.castShadow = true;
+    base.receiveShadow = true;
     stand.add(base);
-    // Escadas de acesso
+
+    // Escadas de acesso (blocos empilhados)
     const stairs = new THREE.Group();
-    for (let s = 0; s < 4; s++) {
-      const step = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.4, 3.2), stairM);
-      step.position.set(0, s * 0.4 + 0.2, -1.4 + s * 0.8);
+    for (let s = 0; s < 5; s++) {
+      const step = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.5, 4), stairM);
+      step.position.set(0, s * 0.5 + 0.25, -2.0 + s * 0.9);
       step.castShadow = true;
+      step.receiveShadow = true;
       stairs.add(step);
     }
-    stairs.position.set(-5.5, 0, 0);
+    stairs.position.set(-7.0, 0, 0);
     stairs.rotation.y = Math.PI / 4;
     stand.add(stairs);
-    // Assentos (fileiras)
-    for (let r = 0; r < 3; r++) {
-      const seats = new THREE.Mesh(new THREE.BoxGeometry(10.4, 0.3, 0.2), seatM);
-      seats.position.set(0, 3.0 + r * 0.55, 1.0 + r * 0.25);
-      stand.add(seats);
+
+    // Fileiras de assentos (blocos de concreto vermelho em níveis)
+    for (let r = 0; r < 4; r++) {
+      const seatLevel = new THREE.Mesh(new THREE.BoxGeometry(15.2, 0.45, 0.25), seatM);
+      seatLevel.position.set(0, 4.0 + r * 0.65, 1.2 + r * 0.3);
+      seatLevel.castShadow = true;
+      seatLevel.receiveShadow = true;
+      stand.add(seatLevel);
+
+      // Parapeito/grade de concreto entre níveis
+      if (r < 3) {
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(15.8, 0.2, 0.15), standM);
+        rail.position.set(0, 4.3 + r * 0.65, 1.35 + r * 0.3);
+        rail.castShadow = true;
+        stand.add(rail);
+      }
     }
-    const dist = TRACK_HALF_WIDTH + 22;
+
+    const dist = TRACK_HALF_WIDTH + 28;
     stand.position.set(sm.x + sm.nx * side * dist, sm.y, sm.z + sm.nz * side * dist);
     const faceX = -sm.nx * side;
     const faceZ = -sm.nz * side;

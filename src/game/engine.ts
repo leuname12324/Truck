@@ -101,7 +101,8 @@ export function createGame(canvas: HTMLCanvasElement): GameHandle {
     vis.group.rotation.order = "YXZ";
     vis.group.rotation.y = tr.yaw + Math.PI;
     vis.group.rotation.z = tr.steerVis * 0.12;
-    vis.group.rotation.x = 0;
+    // Inclinação da carroceria por transferência de peso (frenagem/aceleração/curva)
+    vis.group.rotation.x = (tr.groupTilt || 0) * 0.5;
     const open = tr.wings ? -0.95 : 0.12;
     const wk = 1 - Math.exp(-14 * dt);
     vis.wing.rotation.x += (open - vis.wing.rotation.x) * wk;
@@ -126,7 +127,8 @@ export function createGame(canvas: HTMLCanvasElement): GameHandle {
     const fx = -Math.sin(tr.yaw);
     const fz = -Math.cos(tr.yaw);
     const speedK = Math.abs(tr.speed);
-    const target = baseFov() + Math.min(8, speedK * 0.09);
+    // FOV mais amplo em alta velocidade = sensação de velocidade
+    const target = baseFov() + Math.min(14, speedK * 0.12);
     camera.fov += (target - camera.fov) * (1 - Math.exp(-4 * dt));
     camera.updateProjectionMatrix();
 
@@ -135,12 +137,12 @@ export function createGame(canvas: HTMLCanvasElement): GameHandle {
       desired.set(tr.x + Math.cos(t) * 14, tr.y + 8.5, tr.z + Math.sin(t) * 14);
       lookAt.set(tr.x, tr.y + 1.4, tr.z);
     } else {
-      // A taller, further chase camera keeps the whole truck (and the road
-      // ahead) in frame at 250 km/h on a phone.
-      const dist = 15.5 + Math.min(2.4, speedK * 0.025);
-      const height = 6.6;
+      // Câmera de perseguição: mais próxima em baixa velocidade, mais distante em alta
+      // para transmitir sensação de deslocamento rápido
+      const dist = 14.5 + Math.min(3.5, speedK * 0.035);
+      const height = 6.0 + Math.min(1.5, speedK * 0.015);
       desired.set(tr.x - fx * dist, tr.y + height, tr.z - fz * dist);
-      lookAt.set(tr.x + fx * 10, tr.y + 2.2, tr.z + fz * 10);
+      lookAt.set(tr.x + fx * 12, tr.y + 2.0, tr.z + fz * 12);
     }
 
     desired.y = liftCamera(desired.x, desired.z, desired.y, tr.t);
@@ -153,11 +155,17 @@ export function createGame(canvas: HTMLCanvasElement): GameHandle {
     camLook.lerp(lookAt, 1 - Math.exp(-8 * dt));
     camPos.y = liftCamera(camPos.x, camPos.z, camPos.y, tr.t);
 
+    // Vibração da câmera em alta velocidade e em colisão
     const shake = trauma * trauma;
+    const speedShake = Math.min(0.06, speedK * 0.00015) * (0.5 + 0.5 * Math.sin(performance.now() * 0.01));
     if (shake > 0.001) {
       camPos.x += (Math.random() - 0.5) * shake * 0.45;
       camPos.y += (Math.random() - 0.5) * shake * 0.25;
     }
+    // Micro-vibração constante em movimento
+    camPos.x += (Math.random() - 0.5) * speedShake * 0.3;
+    camPos.z += (Math.random() - 0.5) * speedShake * 0.3;
+
     camera.position.copy(camPos);
     camera.lookAt(camLook);
     camera.up.copy(up);
