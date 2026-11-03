@@ -188,11 +188,11 @@ function applyDrive(
   tr.z += (tr.vz + rz * lat) * dt;
 
   const n2 = nearestOnTrack(tr.x, tr.z, tr.t);
-  // Suspensão suave: o caminhão não teleporta para a altura da pista, o que
-  // fazia ele afundar ou voar em mudanças bruscas de elevação. Agora sobe/desce
-  // gradualmente, como uma suspensão de verdade.
+  // Suspensão sensível ao relevo: o caminhão sobe e desce com a elevação da
+  // pista, reagindo até a pequenas mudanças de altura (relevo). O amortecimento
+  // é baixo para sentir os ondulados do asfalto.
   const targetY = n2.sample.y + 0.72;
-  tr.susp += (targetY - tr.susp) * (1 - Math.exp(-10 * dt));
+  tr.susp += (targetY - tr.susp) * (1 - Math.exp(-6 * dt));
   tr.y = tr.susp;
   const side = Math.sign(n2.lateral) || 1;
   const room = lateralRoom(n2.index, side);

@@ -281,25 +281,24 @@ export function buildWorld(scene: THREE.Scene): () => void {
   gantry.rotation.y = Math.atan2(sf.tx, sf.tz);
   scene.add(gantry);
 
-  // Grandstands wherever there is clear space off the circuit, upright.
-  // Skip the first samples (start/first corner) so the stand does not block
-  // the view on the Senna S / first corner.
+  // Grandstands far off the circuit so they never block the view.
+  // Skip the first samples (start/first corner).
   const standM = new THREE.MeshStandardMaterial({ color: "#8a9094", roughness: 0.7 });
   const seatM = new THREE.MeshStandardMaterial({ color: "#c23b2e", roughness: 0.6 });
   let stands = 0;
-  for (let k = 20; k < SAMPLES.length && stands < 14; k += 10) {
+  for (let k = 30; k < SAMPLES.length && stands < 12; k += 12) {
     const sm = SAMPLES[k];
     const side = lateralRoom(k, 1) > lateralRoom(k, -1) ? 1 : -1;
     const room = lateralRoom(k, side);
-    if (room < TRACK_HALF_WIDTH + 16) continue;
+    if (room < TRACK_HALF_WIDTH + 22) continue;
     const stand = new THREE.Group();
-    const base = new THREE.Mesh(new THREE.BoxGeometry(14, 6, 5), standM);
-    base.position.y = 3;
+    const base = new THREE.Mesh(new THREE.BoxGeometry(12, 5.5, 4), standM);
+    base.position.y = 2.75;
     base.castShadow = true;
-    const seats = new THREE.Mesh(new THREE.BoxGeometry(13.2, 4, 0.3), seatM);
-    seats.position.set(0, 3.2, 2.4);
+    const seats = new THREE.Mesh(new THREE.BoxGeometry(11.2, 3.6, 0.25), seatM);
+    seats.position.set(0, 2.9, 2.1);
     stand.add(base, seats);
-    const dist = TRACK_HALF_WIDTH + 13;
+    const dist = TRACK_HALF_WIDTH + 22;
     stand.position.set(sm.x + sm.nx * side * dist, sm.y, sm.z + sm.nz * side * dist);
     const faceX = -sm.nx * side;
     const faceZ = -sm.nz * side;

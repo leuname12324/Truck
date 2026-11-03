@@ -7,49 +7,52 @@ function mat(color: string, extras: Partial<THREE.MeshStandardMaterialParameters
 
 function liveryTexture(livery: Livery): THREE.CanvasTexture {
   const c = document.createElement("canvas");
-  c.width = 512;
-  c.height = 512;
+  c.width = 1024;
+  c.height = 1024;
   const g = c.getContext("2d")!;
+  // Base metallic body
   g.fillStyle = livery.body;
-  g.fillRect(0, 0, 512, 512);
-  for (let i = 0; i < 1400; i++) {
-    const a = 0.03 + Math.random() * 0.05;
-    g.fillStyle = Math.random() > 0.5 ? `rgba(0,0,0,${a})` : `rgba(255,255,255,${a * 0.6})`;
-    g.fillRect(Math.random() * 512, Math.random() * 512, 2 + Math.random() * 2, 1);
+  g.fillRect(0, 0, 1024, 1024);
+  // Subtle metallic noise
+  for (let i = 0; i < 3000; i++) {
+    const a = 0.02 + Math.random() * 0.04;
+    g.fillStyle = Math.random() > 0.5 ? `rgba(0,0,0,${a})` : `rgba(255,255,255,${a * 0.5})`;
+    g.fillRect(Math.random() * 1024, Math.random() * 1024, 1.5, 1.5);
   }
-  g.strokeStyle = "rgba(0,0,0,0.35)";
-  g.lineWidth = 3;
-  for (let y = 36; y < 512; y += 52) {
-    g.beginPath();
-    g.moveTo(0, y);
-    g.lineTo(512, y);
-    g.stroke();
-  }
-  for (let x = 64; x < 512; x += 128) {
-    g.beginPath();
-    g.moveTo(x, 0);
-    g.lineTo(x, 512);
-    g.stroke();
-  }
+  // Main racing stripe along the side
   g.fillStyle = livery.stripe;
-  g.fillRect(0, 292, 512, 78);
+  g.fillRect(0, 410, 1024, 150);
   g.fillStyle = livery.accent;
-  g.fillRect(0, 370, 512, 18);
+  g.fillRect(0, 545, 1024, 34);
+  // Front number block (stripe color bg, white number)
+  g.fillStyle = livery.stripe;
   g.beginPath();
-  g.moveTo(0, 48);
-  g.lineTo(210, 48);
-  g.lineTo(300, 168);
-  g.lineTo(70, 168);
+  g.moveTo(40, 60);
+  g.lineTo(420, 60);
+  g.lineTo(520, 260);
+  g.lineTo(140, 260);
   g.closePath();
   g.fill();
-  g.fillStyle = livery.stripe;
-  g.font = "700 54px Teko, Arial Black, sans-serif";
-  g.textAlign = "left";
+  // Large racing number
+  g.fillStyle = livery.accent;
+  g.font = "bold 200px Teko, Arial Black, sans-serif";
+  g.textAlign = "center";
   g.textBaseline = "middle";
-  g.fillText(livery.number, 24, 118);
+  g.fillText(livery.number, 230, 145);
+  // Number outline for contrast
+  g.strokeStyle = "#000";
+  g.lineWidth = 6;
+  g.strokeText(livery.number, 230, 145);
+  // "COPA TRUCK" banner on side
+  g.fillStyle = "#1a1a1a";
+  g.fillRect(0, 720, 1024, 110);
+  g.fillStyle = livery.body;
+  g.font = "bold 74px Teko, sans-serif";
+  g.textAlign = "center";
+  g.fillText("COPA TRUCK", 512, 775);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 8;
+  t.anisotropy = 16;
   return t;
 }
 
