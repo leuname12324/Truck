@@ -276,13 +276,12 @@ export function buildWorld(scene: THREE.Scene): () => void {
   gantry.rotation.y = Math.atan2(sf.tx, sf.tz);
   scene.add(gantry);
 
-  // Grandstands only where they sit fully off every part of the circuit, upright.
+  // Grandstands wherever there is clear space off the circuit, upright.
   const standM = new THREE.MeshStandardMaterial({ color: "#8a9094", roughness: 0.7 });
   const seatM = new THREE.MeshStandardMaterial({ color: "#c23b2e", roughness: 0.6 });
   let stands = 0;
-  for (let k = 0; k < SAMPLES.length && stands < 5; k += 14) {
+  for (let k = 0; k < SAMPLES.length && stands < 14; k += 10) {
     const sm = SAMPLES[k];
-    if (sm.t > 0.08 && sm.t < 0.9) continue;
     const side = lateralRoom(k, 1) > lateralRoom(k, -1) ? 1 : -1;
     const room = lateralRoom(k, side);
     if (room < TRACK_HALF_WIDTH + 14) continue;

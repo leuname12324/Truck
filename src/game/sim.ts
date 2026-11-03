@@ -43,8 +43,8 @@ export type TruckSim = {
 };
 
 const KMH = 1 / 3.6;
-const TOP_SPEED = 250 * KMH;
-const WING_BONUS = 20 * KMH;
+const TOP_SPEED = 240 * KMH;   // ~240 km/h com asa fechada
+const WING_BONUS = 26 * KMH;   // ~266 km/h com asa aberta (240 + 26)
 const BOOST_BONUS = 10 * KMH;
 const ABS_CAP = 280 * KMH;
 const ACCEL = 38;
