@@ -14,6 +14,30 @@ import { useGameStore } from "./store";
 import type { Actions } from "./input";
 import { getBrakePower } from "./tuning";
 
+// Sensibilidade padrão da direção (ajustável pelo usuário no menu)
+let steeringSensitivity = 1.0;
+
+export function setSteeringSensitivity(v: number) {
+  steeringSensitivity = Math.max(0.3, Math.min(2.0, v));
+}
+
+export function getSteeringSensitivity(): number {
+  return steeringSensitivity;
+}
+
+// Sincroniza com o valor do Zustand store quando disponível
+function readSteeringSensitivity(): number {
+  try {
+    const s = useGameStore.getState();
+    if (s && typeof s.steeringSensitivity === 'number') {
+      steeringSensitivity = s.steeringSensitivity;
+    }
+  } catch {
+    // store pode não estar pronto ainda
+  }
+  return steeringSensitivity;
+}
+
 export type TruckSim = {
   x: number;
   y: number;
@@ -50,10 +74,10 @@ const TOP_SPEED = 230 * KMH;   // ~230 km/h com asa fechada
 const WING_BONUS = 35 * KMH;   // ~265 km/h com asa aberta (230 + 35)
 const BOOST_BONUS = 10 * KMH;
 const ABS_CAP = 280 * KMH;
-const ACCEL = 28;              // Aceleração mais progressiva (caminhão pesado)
-const BRAKE = 34;              // Frenagem progressiva, distância maior
+const ACCEL = 42;              // Aceleração para atingir 230 km/h com física realista
+const BRAKE = 46;              // Frenagem progressiva, distância maior
 const DRAG = ACCEL / TOP_SPEED;
-const TURN = 1.15;             // Direção menos sensível (caminhão grande)
+const TURN = 1.62;             // Base da direção (ajustada por sensibilidade)
 const GRIP = 11.0;
 const DRIFT_GRIP = 2.6;
 
@@ -148,7 +172,7 @@ function applyDrive(
   // Quanto mais rápido, mais difícil vira (inércia direcional).
   const speedK = Math.abs(tr.speed);
   const inertiaTurn = 1 - CORNER_STABILITY * clamp(speedK / TOP_SPEED, 0, 1);
-  const effectiveTurn = TURN * inertiaTurn;
+  const effectiveTurn = TURN * readSteeringSensitivity() * inertiaTurn;
 
   // ---- ACELERAÇÃO PROGRESSIVA ----
   // Caminhão pesado não sai disparado. Há atraso do motor na saída da imobilidade.
