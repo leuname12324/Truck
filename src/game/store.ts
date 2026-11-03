@@ -27,15 +27,14 @@ export type HudState = {
 type GameStore = HudState & {
   patch: (p: Partial<HudState>) => void;
   resetHud: () => void;
+  setTotalLaps: (n: number) => void;
 };
-
-const TOTAL_LAPS = 3;
 
 const initial: HudState = {
   phase: "menu",
   speed: 0,
   lap: 1,
-  totalLaps: TOTAL_LAPS,
+  totalLaps: 3,
   lapTime: 0,
   lastLap: 0,
   bestLap: 0,
@@ -57,6 +56,7 @@ export const useGameStore = create<GameStore>((set) => ({
   ...initial,
   patch: (p) => set(p),
   resetHud: () => set({ ...initial, bestLap: useGameStore.getState().bestLap }),
+  setTotalLaps: (n) => set({ totalLaps: n }),
 }));
 
-export const TOTAL_LAPS_CONST = TOTAL_LAPS;
+export const TOTAL_LAPS_CONST = 3;
