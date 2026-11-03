@@ -21,6 +21,7 @@ export type HudState = {
   x: number;
   z: number;
   yaw: number;
+  steeringSensitivity: number;
   results: { name: string; time: number; isPlayer: boolean }[];
 };
 
@@ -28,6 +29,7 @@ type GameStore = HudState & {
   patch: (p: Partial<HudState>) => void;
   resetHud: () => void;
   setTotalLaps: (n: number) => void;
+  setSteeringSensitivity: (v: number) => void;
 };
 
 const initial: HudState = {
@@ -49,6 +51,7 @@ const initial: HudState = {
   x: 0,
   z: 0,
   yaw: 0,
+  steeringSensitivity: 1.0,
   results: [],
 };
 
@@ -57,6 +60,7 @@ export const useGameStore = create<GameStore>((set) => ({
   patch: (p) => set(p),
   resetHud: () => set({ ...initial, bestLap: useGameStore.getState().bestLap }),
   setTotalLaps: (n) => set({ totalLaps: n }),
+  setSteeringSensitivity: (v) => set({ steeringSensitivity: v }),
 }));
 
 export const TOTAL_LAPS_CONST = 3;
