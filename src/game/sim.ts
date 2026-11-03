@@ -10,7 +10,7 @@ import {
   yawFromTangent,
 } from "./track";
 import { LIVERIES, type Livery } from "./liveries";
-import { TOTAL_LAPS_CONST } from "./store";
+import { useGameStore } from "./store";
 import type { Actions } from "./input";
 import { getBrakePower } from "./tuning";
 
@@ -53,7 +53,7 @@ const ACCEL = 42;
 const BRAKE = 46;
 const DRAG = ACCEL / TOP_SPEED;
 const TURN = 1.62;
-const GRIP = 9.5;
+const GRIP = 11.0;
 const DRIFT_GRIP = 2.6;
 
 function clamp(v: number, a: number, b: number) {
@@ -189,11 +189,16 @@ function applyDrive(
 
   const n2 = nearestOnTrack(tr.x, tr.z, tr.t);
   // Suspensão sensível ao relevo: o caminhão sobe e desce com a elevação da
-  // pista, reagindo até a pequenas mudanças de altura (relevo). O amortecimento
-  // é baixo para sentir os ondulados do asfalto.
-  const targetY = n2.sample.y + 0.72;
-  tr.susp += (targetY - tr.susp) * (1 - Math.exp(-6 * dt));
+  // pista, reagindo até a pequenas mudanças de altura. Amortecimento forte
+  // para não deixar o caminhão voar ou pular.
+  const targetY = n2.sample.y + 0.65;
+  const maxStep = 0.8; // não deixa o caminhão saltar mais que isso por frame
+  let dy = targetY - tr.susp;
+  dy = Math.max(-maxStep, Math.min(maxStep, dy));
+  tr.susp += dy * (1 - Math.exp(-10 * dt));
   tr.y = tr.susp;
+  // Nunca deixa o caminhão ficar abaixo do asfalto nem muito acima
+  tr.y = Math.max(tr.y, n2.sample.y + 0.5);
   const side = Math.sign(n2.lateral) || 1;
   const room = lateralRoom(n2.index, side);
   const wall = Math.min(TRACK_HALF_WIDTH + 8.2, Math.max(TRACK_HALF_WIDTH + 1.2, room - 0.8));
@@ -222,7 +227,8 @@ function applyDrive(
       if (tr.nextCp === 0) {
         tr.lastLap = tr.lapTime;
         if (tr.bestLap === 0 || tr.lapTime < tr.bestLap) tr.bestLap = tr.lapTime;
-        if (tr.lap >= TOTAL_LAPS_CONST) {
+        const totalLaps = useGameStore.getState().totalLaps || 3;
+        if (tr.lap >= totalLaps) {
           tr.finished = true;
           tr.speed *= 0.4;
         } else {

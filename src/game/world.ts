@@ -285,6 +285,7 @@ export function buildWorld(scene: THREE.Scene): () => void {
   // Skip the first samples (start/first corner).
   const standM = new THREE.MeshStandardMaterial({ color: "#8a9094", roughness: 0.7 });
   const seatM = new THREE.MeshStandardMaterial({ color: "#c23b2e", roughness: 0.6 });
+  const stairM = new THREE.MeshStandardMaterial({ color: "#6b7280", roughness: 0.9 });
   let stands = 0;
   for (let k = 30; k < SAMPLES.length && stands < 12; k += 12) {
     const sm = SAMPLES[k];
@@ -292,12 +293,28 @@ export function buildWorld(scene: THREE.Scene): () => void {
     const room = lateralRoom(k, side);
     if (room < TRACK_HALF_WIDTH + 22) continue;
     const stand = new THREE.Group();
+    // Base de concreto
     const base = new THREE.Mesh(new THREE.BoxGeometry(12, 5.5, 4), standM);
     base.position.y = 2.75;
     base.castShadow = true;
-    const seats = new THREE.Mesh(new THREE.BoxGeometry(11.2, 3.6, 0.25), seatM);
-    seats.position.set(0, 2.9, 2.1);
-    stand.add(base, seats);
+    stand.add(base);
+    // Escadas de acesso
+    const stairs = new THREE.Group();
+    for (let s = 0; s < 4; s++) {
+      const step = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.4, 3.2), stairM);
+      step.position.set(0, s * 0.4 + 0.2, -1.4 + s * 0.8);
+      step.castShadow = true;
+      stairs.add(step);
+    }
+    stairs.position.set(-5.5, 0, 0);
+    stairs.rotation.y = Math.PI / 4;
+    stand.add(stairs);
+    // Assentos (fileiras)
+    for (let r = 0; r < 3; r++) {
+      const seats = new THREE.Mesh(new THREE.BoxGeometry(10.4, 0.3, 0.2), seatM);
+      seats.position.set(0, 3.0 + r * 0.55, 1.0 + r * 0.25);
+      stand.add(seats);
+    }
     const dist = TRACK_HALF_WIDTH + 22;
     stand.position.set(sm.x + sm.nx * side * dist, sm.y, sm.z + sm.nz * side * dist);
     const faceX = -sm.nx * side;

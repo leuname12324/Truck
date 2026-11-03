@@ -96,6 +96,12 @@ function BrakeTune() {
 }
 
 function StartScreen({ onStart }: { onStart: () => void }) {
+  const totalLaps = useGameStore((s) => s.totalLaps);
+  const setTotalLaps = useGameStore((s) => s.setTotalLaps);
+  const [laps, setLaps] = useState(totalLaps);
+  useEffect(() => {
+    setTotalLaps(laps);
+  }, [laps, setTotalLaps]);
   return (
     <div className="absolute inset-0 z-20 overflow-y-auto bg-[linear-gradient(180deg,transparent_0%,rgba(12,13,12,0.18)_40%,rgba(12,13,12,0.92)_100%)]">
       <div className="flex min-h-full flex-col justify-end gap-5 px-6 pb-[max(2rem,env(safe-area-inset-bottom))] pt-20 md:px-12 md:pb-12">
@@ -105,14 +111,24 @@ function StartScreen({ onStart }: { onStart: () => void }) {
           <span className="block text-accent">Interlagos</span>
         </h1>
         <p className="max-w-md text-pretty text-sm leading-relaxed text-muted md:text-base">
-          Três voltas no traçado clássico de São Paulo. Caminhão de 1.200 cv, S do Senna, Descida do Lago e a subida
+          Corrida no traçado clássico de São Paulo. Caminhão de 1.200 cv, S do Senna, Descida do Lago e a subida
           até as arquibancadas.
         </p>
         <div className="flex flex-wrap items-center gap-3">
+          <label className="text-xs text-subtle uppercase tracking-wider">Voltas</label>
+          <select
+            value={laps}
+            onChange={(e) => setLaps(Number(e.target.value))}
+            className="bg-bg/40 border border-border rounded px-3 py-1.5 text-sm text-fg focus:outline-none focus:border-accent"
+          >
+            <option value={3}>3</option>
+            <option value={5}>5</option>
+            <option value={7}>7</option>
+          </select>
+          <p className="text-xs text-subtle">{laps === 1 ? 'volta completa' : laps + ' voltas completas'}</p>
           <Button size="xl" onClick={onStart} className="min-w-44 font-display text-2xl tracking-wide">
             Largar
           </Button>
-          <p className="text-xs text-subtle">Largada · 3 voltas</p>
         </div>
         <dl className="mt-2 hidden grid-cols-3 gap-6 text-xs text-muted md:grid md:max-w-lg">
           <div>
@@ -125,7 +141,7 @@ function StartScreen({ onStart }: { onStart: () => void }) {
           </div>
           <div>
             <dt className="text-subtle">Pista</dt>
-            <dd className="mt-1 text-fg">Anti-horário · 3 voltas</dd>
+            <dd className="mt-1 text-fg">Anti-horário · {laps} voltas</dd>
           </div>
         </dl>
         <BrakeTune />
