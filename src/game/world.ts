@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { SAMPLES, TRACK_HALF_WIDTH, TRACK_LENGTH, lateralRoom } from "./track";
 
-function canvasTex(draw: (ctx: CanvasRenderingContext2D, size: number) => void, size = 256): THREE.CanvasTexture {
+function canvasTex(draw: (ctx: CanvasRenderingContext2D, size: number) => void, size = 512): THREE.CanvasTexture {
   const c = document.createElement("canvas");
   c.width = size;
   c.height = size;
@@ -9,7 +9,7 @@ function canvasTex(draw: (ctx: CanvasRenderingContext2D, size: number) => void, 
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.anisotropy = 8;
+  t.anisotropy = 16;
   return t;
 }
 
@@ -17,24 +17,29 @@ function asphaltTex() {
   return canvasTex((g, s) => {
     g.fillStyle = "#2b2c2e";
     g.fillRect(0, 0, s, s);
-    for (let i = 0; i < 1800; i++) {
-      g.fillStyle = `rgba(0,0,0,${0.08 + Math.random() * 0.12})`;
+    // mais detalhe de superfície em resolução maior
+    for (let i = 0; i < 4000; i++) {
+      g.fillStyle = `rgba(0,0,0,${0.06 + Math.random() * 0.10})`;
       g.fillRect(Math.random() * s, Math.random() * s, 1 + Math.random() * 2, 1);
     }
+    for (let i = 0; i < 600; i++) {
+      g.fillStyle = `rgba(255,255,255,${0.08 + Math.random() * 0.10})`;
+      g.fillRect(Math.random() * s, Math.random() * s, 1, 1);
+    }
     g.fillStyle = "rgba(255,255,255,0.14)";
-    g.fillRect(s * 0.48, 0, 3, s);
-  }, 256);
+    g.fillRect(s * 0.48, 0, 4, s);
+  }, 512);
 }
 
 function grassTex() {
   return canvasTex((g, s) => {
     g.fillStyle = "#2f5a32";
     g.fillRect(0, 0, s, s);
-    for (let i = 0; i < 1200; i++) {
+    for (let i = 0; i < 2500; i++) {
       g.fillStyle = Math.random() > 0.5 ? "#3a6b38" : "#264a2c";
       g.fillRect(Math.random() * s, Math.random() * s, 2, 2);
     }
-  }, 128);
+  }, 256);
 }
 
 function kerbTex() {
@@ -44,7 +49,7 @@ function kerbTex() {
       g.fillStyle = i % 2 === 0 ? "#c23b2e" : "#f4f6f1";
       g.fillRect(0, i * stripe, s, stripe);
     }
-  }, 64);
+  }, 128);
 }
 
 function clampOffset(i: number, signed: number) {
@@ -277,22 +282,24 @@ export function buildWorld(scene: THREE.Scene): () => void {
   scene.add(gantry);
 
   // Grandstands wherever there is clear space off the circuit, upright.
+  // Skip the first samples (start/first corner) so the stand does not block
+  // the view on the Senna S / first corner.
   const standM = new THREE.MeshStandardMaterial({ color: "#8a9094", roughness: 0.7 });
   const seatM = new THREE.MeshStandardMaterial({ color: "#c23b2e", roughness: 0.6 });
   let stands = 0;
-  for (let k = 0; k < SAMPLES.length && stands < 14; k += 10) {
+  for (let k = 20; k < SAMPLES.length && stands < 14; k += 10) {
     const sm = SAMPLES[k];
     const side = lateralRoom(k, 1) > lateralRoom(k, -1) ? 1 : -1;
     const room = lateralRoom(k, side);
-    if (room < TRACK_HALF_WIDTH + 14) continue;
+    if (room < TRACK_HALF_WIDTH + 16) continue;
     const stand = new THREE.Group();
-    const base = new THREE.Mesh(new THREE.BoxGeometry(16, 6.5, 6), standM);
-    base.position.y = 3.25;
+    const base = new THREE.Mesh(new THREE.BoxGeometry(14, 6, 5), standM);
+    base.position.y = 3;
     base.castShadow = true;
-    const seats = new THREE.Mesh(new THREE.BoxGeometry(15.2, 4.2, 0.35), seatM);
-    seats.position.set(0, 3.4, 2.7);
+    const seats = new THREE.Mesh(new THREE.BoxGeometry(13.2, 4, 0.3), seatM);
+    seats.position.set(0, 3.2, 2.4);
     stand.add(base, seats);
-    const dist = TRACK_HALF_WIDTH + 11;
+    const dist = TRACK_HALF_WIDTH + 13;
     stand.position.set(sm.x + sm.nx * side * dist, sm.y, sm.z + sm.nz * side * dist);
     const faceX = -sm.nx * side;
     const faceZ = -sm.nz * side;

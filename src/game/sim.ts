@@ -40,14 +40,16 @@ export type TruckSim = {
   charge: number;
   drifting: boolean;
   wings: boolean;
+  prevWings: boolean;
+  susp: number;
 };
 
 const KMH = 1 / 3.6;
-const TOP_SPEED = 240 * KMH;   // ~240 km/h com asa fechada
-const WING_BONUS = 26 * KMH;   // ~266 km/h com asa aberta (240 + 26)
+const TOP_SPEED = 230 * KMH;   // ~230 km/h com asa fechada
+const WING_BONUS = 35 * KMH;   // ~265 km/h com asa aberta (230 + 35)
 const BOOST_BONUS = 10 * KMH;
 const ABS_CAP = 280 * KMH;
-const ACCEL = 38;
+const ACCEL = 42;
 const BRAKE = 46;
 const DRAG = ACCEL / TOP_SPEED;
 const TURN = 1.62;
@@ -94,6 +96,8 @@ export function spawnTruck(index: number, isPlayer: boolean, pace = 0.5, liveryI
     charge: 0,
     drifting: false,
     wings: false,
+    prevWings: false,
+    susp: 0,
   };
 }
 
@@ -124,6 +128,12 @@ function applyDrive(
   const onSlow = absLat > TRACK_HALF_WIDTH + 1.2;
   const offTrack = absLat > TRACK_HALF_WIDTH + 0.9;
   tr.wings = wings && tr.speed > 2;
+  // Boost imediato ao abrir a asa (efeito DRS-like): sobe a velocidade logo
+  // ao acionar o Shift, não apenas ao longo do tempo.
+  if (tr.wings && !tr.prevWings && tr.speed > 5) {
+    tr.speed = Math.min(tr.speed + 18 * KMH, ABS_CAP);
+  }
+  tr.prevWings = tr.wings;
 
   const speedFactor = clamp(Math.abs(tr.speed) / 9, 0, 1) * (1 - 0.22 * clamp(Math.abs(tr.speed) / TOP_SPEED, 0, 1));
   const reverse = tr.speed >= 0 ? 1 : -1;
@@ -178,7 +188,12 @@ function applyDrive(
   tr.z += (tr.vz + rz * lat) * dt;
 
   const n2 = nearestOnTrack(tr.x, tr.z, tr.t);
-  tr.y = n2.sample.y;
+  // Suspensão suave: o caminhão não teleporta para a altura da pista, o que
+  // fazia ele afundar ou voar em mudanças bruscas de elevação. Agora sobe/desce
+  // gradualmente, como uma suspensão de verdade.
+  const targetY = n2.sample.y + 0.72;
+  tr.susp += (targetY - tr.susp) * (1 - Math.exp(-10 * dt));
+  tr.y = tr.susp;
   const side = Math.sign(n2.lateral) || 1;
   const room = lateralRoom(n2.index, side);
   const wall = Math.min(TRACK_HALF_WIDTH + 8.2, Math.max(TRACK_HALF_WIDTH + 1.2, room - 0.8));

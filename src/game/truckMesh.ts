@@ -194,8 +194,10 @@ export function createTruck(livery: Livery): TruckVisual {
 
   const endL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.42, 0.62), stripeM);
   endL.position.set(1.42, 2.28, -2.38);
+  endL.name = "wingEnd";
   const endR = endL.clone();
   endR.position.x = -1.42;
+  endR.name = "wingEnd";
   body.add(endL, endR);
 
   const tailL = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.12, 0.08), brakeM);

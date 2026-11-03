@@ -102,9 +102,16 @@ export function createGame(canvas: HTMLCanvasElement): GameHandle {
     vis.group.rotation.y = tr.yaw + Math.PI;
     vis.group.rotation.z = tr.steerVis * 0.12;
     vis.group.rotation.x = 0;
-    const open = tr.wings ? -0.62 : 0.12;
-    const wk = 1 - Math.exp(-10 * dt);
+    const open = tr.wings ? -0.95 : 0.12;
+    const wk = 1 - Math.exp(-14 * dt);
     vis.wing.rotation.x += (open - vis.wing.rotation.x) * wk;
+    // Animação tipo F1: as endplates da asa acompanham o movimento principal.
+    const wingOpen = tr.wings ? 1 : 0;
+    vis.group.children.forEach((c) => {
+      if (c.name === "wingEnd") {
+        c.rotation.z += (wingOpen * 0.15 - c.rotation.z) * wk;
+      }
+    });
     const spin = (tr.speed / 0.52) * dt;
     for (const w of vis.wheels) w.rotation.x += spin;
     for (const w of vis.frontWheels) w.rotation.y = tr.steerVis * 0.4;
