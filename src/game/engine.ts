@@ -195,6 +195,8 @@ export function createGame(canvas: HTMLCanvasElement): GameHandle {
       field: field.length,
       driftBoost: Math.max(p.boost, p.charge),
       wings: p.wings,
+      gear: p.gear,
+      rpm: p.rpm,
       x: p.x,
       z: p.z,
       yaw: p.yaw,

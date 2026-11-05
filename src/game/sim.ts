@@ -67,16 +67,22 @@ export type TruckSim = {
   prevWings: boolean;
   susp: number;
   groupTilt: number;
+  gear: number;
+  rpm: number;
 };
 
 const KMH = 1 / 3.6;
 const TOP_SPEED = 230 * KMH;   // ~230 km/h com asa fechada
-const WING_BONUS = 30 * KMH;   // ~260 km/h com asa aberta (230 + 30)   // ~265 km/h com asa aberta (230 + 35)
+const WING_BONUS = 30 * KMH;   // ~260 km/h com asa aberta (230 + 30)
 const BOOST_BONUS = 10 * KMH;
 const ABS_CAP = 280 * KMH;
-const ACCEL = 55;              // Aceleracao gradual para caminhoes pesados              // Aceleração para atingir 230 km/h com física realista
-const BRAKE = 50;              // Frenagem progressiva, distância maior
-const DRAG = ACCEL / TOP_SPEED;
+const ACCEL = 8.0;             // m/s² de base (caminhão pesado, ganho progressivo)
+const WING_THRUST = 1.8;       // m/s² extra enquanto a asa está aberta
+const BRAKE = 11.0;            // m/s² (frenagem forte de caminhão de corrida)
+const ROLL_DRAG = 0.02;        // resistência de rolamento (1/s)
+// 6 marchas: velocidade máxima (km/h) no limite de cada marcha
+const GEAR_TOP_KMH = [35, 70, 110, 155, 200, 260];
+const GEAR_TORQUE = [1.0, 0.96, 0.9, 0.82, 0.72, 0.62];
 const TURN = 1.62;             // Base da direção (ajustada por sensibilidade)
 const GRIP = 11.0;
 const DRIFT_GRIP = 2.6;
@@ -130,6 +136,8 @@ export function spawnTruck(index: number, isPlayer: boolean, pace = 0.5, liveryI
     prevWings: false,
     susp: 0,
     groupTilt: 0,
+    gear: 1,
+    rpm: 0,
   };
 }
 
@@ -160,29 +168,37 @@ function applyDrive(
   const onSlow = absLat > TRACK_HALF_WIDTH + 1.2;
   const offTrack = absLat > TRACK_HALF_WIDTH + 0.9;
   tr.wings = wings && tr.speed > 2;
-  // Boost imediato ao abrir a asa (efeito DRS-like): sobe a velocidade logo
-  // ao acionar o Shift, não apenas ao longo do tempo.
-  if (tr.wings && !tr.prevWings && tr.speed > 5) {
-    tr.speed = Math.min(tr.speed + 18 * KMH, ABS_CAP);
-  }
   tr.prevWings = tr.wings;
 
   // ---- PESO E INÉRCIA DO CAMINHÃO ----
   // Caminhões pesados não mudam de direção instantaneamente.
   // Quanto mais rápido, mais difícil vira (inércia direcional).
   const speedK = Math.abs(tr.speed);
+  const kmh = speedK / KMH;
+
+  // ---- CÂMBIO DE 6 MARCHAS ----
+  // A marcha sobe com a velocidade; o rpm cai quando a marcha troca.
+  let gear = 1;
+  while (gear < 6 && kmh >= GEAR_TOP_KMH[gear - 1]) gear++;
+  const gearLow = gear === 1 ? 0 : GEAR_TOP_KMH[gear - 2] * 0.75;
+  const gearHigh = GEAR_TOP_KMH[gear - 1];
+  const rpmTarget = clamp((kmh - gearLow) / Math.max(1e-3, gearHigh - gearLow), 0.08, 1);
+  tr.gear = gear;
+  tr.rpm += (rpmTarget - tr.rpm) * Math.min(1, 8 * dt);
+
   const inertiaTurn = 1 - CORNER_STABILITY * clamp(speedK / TOP_SPEED, 0, 1);
   const effectiveTurn = TURN * readSteeringSensitivity() * inertiaTurn;
 
   // ---- ACELERAÇÃO PROGRESSIVA ----
   // Caminhão pesado não sai disparado. Há atraso do motor na saída da imobilidade.
-  // A aceleração é menor em baixa velocidade e aumenta conforme o motor "pega".
   const engineLagFactor = 1 - Math.exp(-speedK * ENGINE_LAG * 3);
-  const throttleResponse = throttle * (0.35 + 0.65 * engineLagFactor);
+  const throttleResponse = throttle * (0.45 + 0.55 * engineLagFactor);
 
-  // ---- SISTEMA DE MARCHAS SIMPLIFICADO ----
-  // Quanto mais rápido, menor a aceleração (motor chega no limite de potência)
-  const gearFactor = 1 - clamp(speedK / TOP_SPEED, 0, 0.85);
+  // Potência cai suavemente perto da velocidade máxima, mas nunca zera:
+  // o caminhão realmente alcança 230 km/h (asa fechada) e 260 km/h (asa aberta).
+  const topNow = TOP_SPEED + (tr.wings ? WING_BONUS : 0) + (tr.boost > 0 ? BOOST_BONUS : 0);
+  const powerFactor = 1 - 0.35 * Math.pow(clamp(speedK / topNow, 0, 1), 2);
+  const torque = GEAR_TORQUE[gear - 1] * (1 - 0.18 * tr.rpm);
 
   const speedFactor = clamp(Math.abs(tr.speed) / 9, 0, 1) * (1 - 0.22 * clamp(Math.abs(tr.speed) / TOP_SPEED, 0, 1));
   const reverse = tr.speed >= 0 ? 1 : -1;
@@ -198,31 +214,37 @@ function applyDrive(
 
   // ---- ACELERAÇÃO COM PESO ----
   if (throttleResponse > 0) {
-    // Aceleração progressiva: mais lenta no início, aumenta com o motor
-    const accelForce = ACCEL * throttleResponse * gearFactor * (1 - WEIGHT_TRANSFER * brake);
+    const accelForce = ACCEL * throttleResponse * powerFactor * torque * (1 - WEIGHT_TRANSFER * brake);
     tr.speed += accelForce * dt;
   }
-  if (tr.wings) tr.speed += DRAG * WING_BONUS * dt;
+  // Asa aberta dá um empurrão extra gradual (sem salto instantâneo)
+  if (tr.wings && throttle > 0.1) tr.speed += WING_THRUST * dt;
 
   // ---- FRENAGEM PROGRESSIVA ----
   if (brake > 0) {
     // Caminhão pesado precisa de mais distância para parar
     // A frenagem é menos eficaz em alta velocidade (distância maior)
-    const force = BRAKE * getBrakePower() * (1 - clamp(speedK / TOP_SPEED, 0, 0.4));
+    const force = BRAKE * getBrakePower() * (1 - 0.25 * clamp(speedK / TOP_SPEED, 0, 1));
     if (tr.speed > 0.4) {
       tr.speed -= brake * force * dt;
     } else {
-      tr.speed -= brake * ACCEL * 0.45 * dt;
+      tr.speed -= brake * ACCEL * 0.5 * dt;
     }
   }
 
-  // Arrastar do ar e resistência ao rolamento
-  tr.speed *= 1 - (DRAG + (throttle < 0.1 && brake < 0.1 ? 0.35 : 0)) * dt;
+  // Resistência de rolamento do caminhão
+  tr.speed *= 1 - ROLL_DRAG * dt;
+  // Arrasto aerodinâmico + rolamento quando solta o acelerador
+  if (throttle < 0.1 && brake < 0.1) {
+    const decel = 0.5 + 0.0006 * speedK * speedK;
+    if (Math.abs(tr.speed) <= decel * dt) tr.speed = 0;
+    else tr.speed -= Math.sign(tr.speed) * decel * dt;
+  }
   if (tr.boost > 0) {
-    tr.speed += 14 * dt;
+    tr.speed += 9 * dt;
     tr.boost = Math.max(0, tr.boost - dt);
   }
-  let max = Math.min(ABS_CAP, TOP_SPEED + (tr.wings ? WING_BONUS : 0) + (tr.boost > 0 ? BOOST_BONUS : 0));
+  let max = Math.min(ABS_CAP, topNow);
   if (onSlow) max *= 0.9;
   if (tr.speed > max) tr.speed += (max - tr.speed) * Math.min(1, 6 * dt);
   tr.speed = clamp(tr.speed, -12 * (onSlow ? 0.9 : 1), max + 0.4);

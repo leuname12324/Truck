@@ -18,6 +18,8 @@ export type HudState = {
   wrongWay: boolean;
   driftBoost: number;
   wings: boolean;
+  gear: number;
+  rpm: number;
   x: number;
   z: number;
   yaw: number;
@@ -48,6 +50,8 @@ const initial: HudState = {
   wrongWay: false,
   driftBoost: 0,
   wings: false,
+  gear: 1,
+  rpm: 0,
   x: 0,
   z: 0,
   yaw: 0,
