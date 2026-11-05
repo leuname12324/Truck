@@ -71,11 +71,11 @@ export type TruckSim = {
 
 const KMH = 1 / 3.6;
 const TOP_SPEED = 230 * KMH;   // ~230 km/h com asa fechada
-const WING_BONUS = 35 * KMH;   // ~265 km/h com asa aberta (230 + 35)
+const WING_BONUS = 30 * KMH;   // ~260 km/h com asa aberta (230 + 30)   // ~265 km/h com asa aberta (230 + 35)
 const BOOST_BONUS = 10 * KMH;
 const ABS_CAP = 280 * KMH;
-const ACCEL = 42;              // Aceleração para atingir 230 km/h com física realista
-const BRAKE = 46;              // Frenagem progressiva, distância maior
+const ACCEL = 55;              // Aceleracao gradual para caminhoes pesados              // Aceleração para atingir 230 km/h com física realista
+const BRAKE = 50;              // Frenagem progressiva, distância maior
 const DRAG = ACCEL / TOP_SPEED;
 const TURN = 1.62;             // Base da direção (ajustada por sensibilidade)
 const GRIP = 11.0;
@@ -494,3 +494,4 @@ export function raceDistance(tr: TruckSim): number {
   if (tr.lap === 1 && tr.t > 0.5) along -= TRACK_LENGTH;
   return (tr.lap - 1) * TRACK_LENGTH + along;
 }
+

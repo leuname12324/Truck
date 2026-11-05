@@ -87,16 +87,9 @@ export const SAMPLES: Sample[] = [];
 function buildSamples() {
   const nPts = RAW_POINTS.length;
   const steps = N;
-  // Para ter uma pista 3x mais longa, repetimos o traçado original 3 vezes
-  // como se fosse um circuito contínuo estendido. Assim o carro percorre
-  // 3x a distância antes de completar uma "volta".
-  const extended: { x: number; z: number }[] = [];
-  for (let rep = 0; rep < 3; rep++) {
-    for (let i = 0; i < nPts; i++) {
-      extended.push({ x: RAW_POINTS[i].x, z: RAW_POINTS[i].z });
-    }
-  }
-  const extLen = extended.length;
+  // O traçado original ja foi escalado 3x em points.ts (todas as coordenadas
+  // x,z multiplicadas por 3). Usamos RAW_POINTS diretamente - eh um circuito
+  // fechado, nao uma repeticao. Assim o traçado fica correto, apenas 3x maior.
   const pts: { x: number; z: number }[] = [];
 
   const lerp = (
@@ -112,15 +105,15 @@ function buildSamples() {
     return { x: A.x * a + B.x * b, z: A.z * a + B.z * b };
   };
 
-  // Gerar pontos intermediários via Catmull-Rom sobre o traçado estendido (3x)
+  // Gerar pontos intermediários via Catmull-Rom sobre o traçado original (3x)
   for (let i = 0; i < steps; i++) {
-    const f = (i / steps) * extLen;
-    const i1 = Math.floor(f) % extLen;
+    const f = (i / steps) * nPts;
+    const i1 = Math.floor(f) % nPts;
     const local = f - Math.floor(f);
-    const i0 = (i1 - 1 + extLen) % extLen;
-    const i2 = (i1 + 1) % extLen;
-    const i3 = (i1 + 2) % extLen;
-    const P = [extended[i0], extended[i1], extended[i2], extended[i3]];
+    const i0 = (i1 - 1 + nPts) % nPts;
+    const i2 = (i1 + 1) % nPts;
+    const i3 = (i1 + 2) % nPts;
+    const P = [RAW_POINTS[i0], RAW_POINTS[i1], RAW_POINTS[i2], RAW_POINTS[i3]];
     const knot = (a: { x: number; z: number }, b: { x: number; z: number }) =>
       Math.max(1e-4, Math.hypot(b.x - a.x, b.z - a.z) ** 0.5);
     const t0 = 0;
