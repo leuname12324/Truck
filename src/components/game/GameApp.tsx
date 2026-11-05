@@ -179,6 +179,8 @@ function Hud() {
   const phase = useGameStore((s) => s.phase);
   const driftBoost = useGameStore((s) => s.driftBoost);
   const wings = useGameStore((s) => s.wings);
+  const gear = useGameStore((s) => s.gear);
+  const rpm = useGameStore((s) => s.rpm);
 
   return (
     <div className="pointer-events-none absolute inset-0 z-10 flex flex-col justify-between p-4 pt-[max(1rem,env(safe-area-inset-top))] pb-40 md:p-6 md:pb-6">
@@ -213,11 +215,44 @@ function Hud() {
 
       <div className="flex items-end justify-between gap-3">
         <div className="rounded-[20px] border border-border bg-bg/70 px-4 py-3 backdrop-blur-sm">
-          <p className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-subtle">
-            <Gauge className="size-3.5" />
-            km/h
-          </p>
-          <p className="font-display text-5xl leading-none tabular-nums text-fg">{Math.round(speed)}</p>
+          <div className="flex items-end gap-4">
+            <div>
+              <p className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-subtle">
+                <Gauge className="size-3.5" />
+                km/h
+              </p>
+              <p className="font-display text-5xl leading-none tabular-nums text-fg">{Math.round(speed)}</p>
+            </div>
+            <div className="pb-0.5">
+              <div className="flex items-end gap-1">
+                {[1, 2, 3, 4, 5, 6].map((g) => (
+                  <span
+                    key={g}
+                    className={cn(
+                      "flex h-5 w-5 items-center justify-center rounded-[5px] border text-[10px] font-semibold tabular-nums transition-colors",
+                      gear >= g
+                        ? "border-accent bg-accent text-accent-fg"
+                        : "border-border bg-surface-2 text-subtle",
+                    )}
+                  >
+                    {g}
+                  </span>
+                ))}
+              </div>
+              <div className="mt-1.5 h-1.5 w-[8.5rem] overflow-hidden rounded-full bg-surface-2">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-[width,background-color] duration-75",
+                    rpm > 0.85 ? "bg-danger" : rpm > 0.6 ? "bg-accent" : "bg-accent/55",
+                  )}
+                  style={{ width: `${Math.max(3, Math.min(100, Math.round(rpm * 100)))}%` }}
+                />
+              </div>
+              <p className="mt-1 text-right font-mono text-[10px] uppercase tracking-widest text-subtle">
+                {gear}ª marcha · {Math.round(rpm * 100)}%
+              </p>
+            </div>
+          </div>
           {wings && (
             <p className="mt-1 text-[11px] font-medium tracking-[0.18em] text-accent uppercase">Asa aberta</p>
           )}
